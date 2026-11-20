@@ -5,3 +5,10 @@ livekit-api
 python-dotenv
 httpx
 flask
+pandas
+openpyxl
+xlrd
+pypdf
+python-docx
+beautifulsoup4
+pywebview

@@ -1,0 +1,12 @@
+flask
+python-dotenv
+httpx
+beautifulsoup4
+pandas
+openpyxl
+xlrd
+pypdf
+pdfplumber
+python-docx
+pywebview
+pyinstaller

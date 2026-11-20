@@ -1,159 +1,55 @@
-# 🎓 Voice AI Avatar (LiveKit + Synthesia)
+# FormSaathi Desktop Workspace
 
-A real-time, voice-only AI avatar you can talk to from the browser. You speak, the avatar listens, thinks and answers back out loud with a lip-synced video avatar, in a full-screen UI with no typing.
+Local-first desktop workspace for shop sales reports, source-linked online research, and reviewed job-form entries. It includes an animated helper and a Hindi conversational panel.
 
-## How it works
-
-```
-Browser (index.html)  ──token──►  Flask token server (server.py)
-        │                                   │
-        └────────── WebRTC ─────────────────┘
-                         │
-                   LiveKit Cloud room
-                         │
-              Python agent (agent.py)
-        ┌────────────────┼────────────────────┐
-   Speech-to-text    LLM "brain"         Text-to-speech
- (Deepgram Nova-3)  (LiveKit Inference  (Cartesia, custom
-                     or your own API)      voice supported)
-                         │
-                Synthesia interactive avatar
-                (joins the room, publishes video)
-```
-
-- **Frontend** (`index.html`): full-screen avatar video, one "start" button, mic mute and end-call buttons.
-- **Token server** (`server.py`): a tiny Flask app that serves the page and issues short-lived LiveKit access tokens. Your LiveKit secret never reaches the browser.
-- **Agent** (`agent.py`): a LiveKit Agents worker that handles speech-to-text, generates the answer, speaks it, and drives the Synthesia avatar.
-
-## Features
-
-- Voice-only conversation, full-screen avatar UI
-- Hindi / Hinglish friendly (Deepgram `multi` language STT, Hindi TTS)
-- Custom Cartesia voice support
-- Three interchangeable "brains":
-  1. **Built-in LLM** (default): answers via LiveKit Inference, no extra LLM key needed
-  2. **External HTTP service** (e.g. Spring Boot): the agent forwards each question to your own API
-  3. **Echo mode** (`FAKE_BRAIN=1`): repeats what you said, useful for testing the voice pipeline
-
-## Requirements
-
-- Python 3.11+
-- A [LiveKit Cloud](https://livekit.io) project (URL, API key, API secret)
-- A [Synthesia](https://www.synthesia.io) workspace with Interactive Avatar access (API key and an **Interactive ID** of an avatar your plan can use)
-- Optional: a [Cartesia](https://cartesia.ai) account if you want your own custom voice
-
-## Setup
+## Start
 
 ```bash
-git clone <your-repo-url>
-cd <your-repo-folder>
-
 python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+source venv/bin/activate          # Windows: venv\\Scripts\\activate
 pip install -r requirements.txt
-
-cp .env.example .env.local
-# now open .env.local and fill in your own values
-```
-
-### Environment variables
-
-All configuration lives in `.env.local` (never committed). See `.env.example` for a template.
-
-| Variable | Required | Description |
-|---|---|---|
-| `LIVEKIT_URL` | yes | Your LiveKit project URL, e.g. `wss://your-project.livekit.cloud` |
-| `LIVEKIT_API_KEY` | yes | LiveKit API key |
-| `LIVEKIT_API_SECRET` | yes | LiveKit API secret |
-| `SYNTHESIA_API_KEY` | yes | Synthesia workspace API key |
-| `SYNTHESIA_AVATAR_ID` | yes | Avatar **Interactive ID** (Avatars page, `•••` menu, *Copy Interactive ID*) |
-| `CARTESIA_API_KEY` | no | Needed only for a custom Cartesia voice |
-| `CARTESIA_VOICE_ID` | no | Your custom Cartesia voice ID (used together with `CARTESIA_API_KEY`) |
-| `TTS_MODEL` | no | LiveKit Inference TTS model, default `cartesia/sonic-3` |
-| `TTS_VOICE` | no | Default voice ID when no custom voice is set |
-| `TTS_LANGUAGE` | no | TTS language, default `hi` |
-| `USE_SPRING` | no | Set to `1` to forward questions to an external HTTP service |
-| `SPRING_AVATAR_URL` | no | That service's URL, default `http://127.0.0.1:8080/api/avatar/ask` |
-| `FAKE_BRAIN` | no | Set to `1` for echo mode |
-| `AGENT_NAME` | no | Only if you use explicit agent dispatch |
-
-## Run
-
-Open two terminals (both with the virtual environment activated).
-
-**Terminal 1: the agent**
-```bash
-python agent.py dev
-```
-
-**Terminal 2: the web server**
-```bash
 python server.py
 ```
 
-Then open **http://localhost:8000**, click the start button, allow the microphone, and start talking.
+Open <http://127.0.0.1:8000> on the same computer. Do not expose Flask's development server to the public internet.
 
-> Use `localhost`, not your machine's IP address. Browsers only allow microphone access on `localhost` or HTTPS.
+## Desktop app
 
-### Using an external HTTP "brain"
+- **macOS:** Open `dist/FormSaathi.app` after building with `./build_mac.sh`.
+- **Windows:** Run `build_windows.bat` on a Windows PC; it creates `dist\FormSaathi\FormSaathi.exe`.
+- The `.github/workflows/build-desktop.yml` workflow can build distributable app folders for macOS and Windows from a tagged release or manual workflow run.
 
-Set `USE_SPRING=1` and point `SPRING_AVATAR_URL` to your service. The agent sends:
+The Windows executable must be compiled on Windows (or using the included Windows build workflow). Internet access is required for online research. The rest of the workspace runs locally on the computer.
 
-```http
-POST /api/avatar/ask
-Content-Type: application/json
+## Sales workbook
 
-{ "question": "what the user said" }
-```
+1. Upload a CSV, TSV, XLSX, XLS or JSON export. The app looks for product/item, quantity, unit price or total sales, date, and unit/total cost columns.
+2. Review the on-screen product summary, totals and skipped rows. Choose the currency for display and add a shop/company name if desired.
+3. Download a formatted Excel workbook with **Overview**, **Product Summary**, **Sales Detail**, and **Monthly Trend** sheets.
 
-and expects:
+`Product` and `Quantity` are required. Sales are calculated as quantity × unit price when no total is present. Profit is estimated only when cost data exists. Returns, tax, fees, and overhead are not inferred. Only the first sheet of an uploaded Excel file is read; up to 5,000 uploaded rows are processed.
 
-```json
-{ "answer": "text the avatar should speak" }
-```
+## Jobs and forms
 
-### Testing the voice pipeline without any brain
+- Upload a resume in PDF, DOCX or TXT, or a tabular data file for other forms.
+- Add the online form URL and open it in another tab. Use the field-reader bookmarklet to copy its field names into FormSaathi.
+- Check and correct each suggested match. Uncertain fields stay empty; ask the Hindi assistant what a field means.
+- Review the target HTTPS site and selected values, then confirm the destination checkbox. Generate the generic fill bookmarklet and copy the approved values separately. At the matching site, run the bookmarklet and paste the copied data into its prompt. The bookmarklet contains no personal values and refuses to run on a different site. Verify each entry, handle validation messages, and submit the form yourself.
 
-```bash
-FAKE_BRAIN=1 python agent.py dev
-```
+The app does not log into job sites, submit applications, answer screening questions from assumptions, bypass CAPTCHAs, or fill passwords/OTPs/payment fields. It only prefills reviewed values into the host explicitly approved by the user; it never submits the application. Resume extraction is best-effort; check the extracted name, email, phone, and skills.
 
-The avatar will repeat what you said.
+## Hindi assistant
 
-## Customizing
+The in-app assistant answers basic sales questions from the current report, explains a few common job fields, and asks for more detail when it cannot tell which task you mean. It uses local, rule-based guidance and does not send records or resumes to an external AI service. Online research uses Bing search and returns source titles, snippets, links, and search time; download these into a source workbook and verify each linked page before using its claims. Search snippets are not verified datasets, and the app does not currently create a complete, validated MLA asset list from search alone.
 
-- **Personality / language:** edit `BUILTIN_INSTRUCTIONS` in `agent.py`.
-- **Voice:** set `CARTESIA_VOICE_ID` + `CARTESIA_API_KEY`, or change `TTS_VOICE`.
-- **Look of the UI:** everything is in `index.html` (plain HTML/CSS/JS, no build step).
+`agent.py` is a separate optional voice-agent script and is not started by the desktop app. When run, it sends microphone audio/transcripts to its configured LiveKit/Deepgram/Inference/Synthesia services (and to the configured Spring endpoint when enabled); it also prints voice turns to its console. Keep `.env.local` private and avoid sharing sensitive information through that optional voice path.
 
-## Project structure
+## Privacy and limitations
 
-```
-.
-├── agent.py            # LiveKit agent: STT, answer generation, TTS, Synthesia avatar
-├── server.py           # Flask server: serves the UI and issues LiveKit tokens
-├── index.html          # Full-screen voice-only frontend
-├── requirements.txt    # Python dependencies
-├── .env.example        # Template for your secrets (copy to .env.local)
-└── .gitignore
-```
-
-## Troubleshooting
-
-| Symptom | Likely cause and fix |
-|---|---|
-| Page connects but no avatar appears | Check the agent terminal. `SynthesiaError: ... avatarIds does not exist or is not accessible` means the ID is not an Interactive ID for your workspace or plan. `a Synthesia API key is required` means `SYNTHESIA_API_KEY` is missing. |
-| Avatar joins but stays silent | TTS problem. Custom Cartesia voices need `CARTESIA_API_KEY`; LiveKit Inference only supports Cartesia's default voices. |
-| Avatar says it cannot generate an answer | Only in external-brain mode: your HTTP service is not running or the URL is wrong. |
-| Microphone does not work | Open `http://localhost:8000`, not an IP address, and allow mic access. |
-| `KeyError: 'LIVEKIT_URL'` on `server.py` | `.env.local` is missing or in the wrong folder. It must sit next to `server.py`. |
-
-## Security notes
-
-- Secrets are loaded from `.env.local`, which is git-ignored. **Never commit it.**
-- If a key was ever committed or shared publicly, rotate it in the provider's dashboard.
-- `server.py` runs Flask's development server. For a public deployment, put it behind a production WSGI server (e.g. gunicorn) and HTTPS, and consider adding authentication to `/token`.
-
-## License
-
-Add a license of your choice (for example MIT) before publishing.
+- Uploaded documents are processed in memory and are not saved to disk by the app. Data stays in the active browser page until it is closed or refreshed.
+- Search requests send the query to Bing. Do not include sensitive personal information in search queries. Returned snippets and linked pages can be incomplete or out of date; check source dates and original documents.
+- The local app binds only to loopback and checks the browser request origin. Uploaded CSV/Excel/Word archives, PDF page counts, and row counts have size/complexity caps; generated Excel/CSV escapes formula-like text.
+- Uploads are capped at 12 MB per request; tabular files are capped at 5,000 rows, compressed Office archives at 100 MB expanded size, and resume PDFs at 100 pages. These limits protect a single-computer app from accidental or hostile oversized files.
+- Form fill uses a browser bookmarklet and may not work on custom controls, shadow DOM pages, or sites that block bookmarklets. Complete those fields manually.
+- Field matching is based on column names and labels. It cannot verify source data, job eligibility, or application accuracy.
+- This is a single-user local prototype. Use authentication, a production WSGI server, HTTPS, and security review before any shared or public deployment.

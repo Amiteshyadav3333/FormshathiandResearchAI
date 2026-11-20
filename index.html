@@ -1,163 +1,18 @@
 <!doctype html>
-<html lang="hi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Amitesh kumar Yadav</title>
-<style>
-  :root { --bg:#05070b; --fg:#f2f5fa; --muted:#9aa4b5; --accent:#6c8cff; --danger:#ff5c6c; --ok:#3ddc97; }
-  * { box-sizing: border-box; }
-  html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
-               font-family:-apple-system, "Segoe UI", Roboto, sans-serif; }
-
-  /* Full-screen stage */
-  #stage { position:fixed; inset:0; background:radial-gradient(circle at 50% 40%, #121826, var(--bg) 70%); }
-  #avatarVideo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; display:none; }
-  #stage.has-video #avatarVideo { display:block; }
-
-  /* Start screen */
-  #start { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center; padding:24px; }
-  #stage.connected #start { display:none; }
-  #start h1 { margin:0; font-size:clamp(24px, 4vw, 38px); }
-  #start p { margin:0; color:var(--muted); font-size:15px; }
-  #connectBtn { padding:16px 38px; border:0; border-radius:999px; font-size:18px; font-weight:700; color:#fff;
-                background:var(--accent); cursor:pointer; box-shadow:0 10px 40px rgba(108,140,255,.45); }
-  #connectBtn:disabled { opacity:.6; cursor:default; }
-
-  /* Loading hint while waiting for avatar video */
-  #waiting { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:var(--muted); font-size:16px; }
-  #stage.connected:not(.has-video) #waiting { display:flex; }
-
-  /* Status pill */
-  #badge { position:absolute; top:max(16px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
-           display:none; align-items:center; gap:8px; padding:8px 16px; border-radius:999px;
-           background:rgba(0,0,0,.55); backdrop-filter:blur(8px); font-size:14px; }
-  #stage.connected #badge { display:flex; }
-  .dot { width:9px; height:9px; border-radius:50%; background:var(--ok); }
-  .dot.speaking { background:var(--accent); box-shadow:0 0 10px var(--accent); }
-
-  /* Bottom controls */
-  #controls { position:absolute; left:50%; bottom:max(28px, env(safe-area-inset-bottom)); transform:translateX(-50%);
-              display:none; gap:18px; align-items:center; }
-  #stage.connected #controls { display:flex; }
-  .round { width:64px; height:64px; border-radius:50%; border:0; cursor:pointer; color:#fff; font-size:26px;
-           background:rgba(30,36,48,.85); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; }
-  .round.muted { background:#5a2a31; }
-  .round.end { background:var(--danger); }
-  #muteBtn.talking { box-shadow:0 0 0 6px rgba(108,140,255,.35); }
-</style>
-</head>
-<body>
-<div id="stage">
-  <video id="avatarVideo" autoplay playsinline></video>
-
-  <div id="start">
-    <h1>🎓 Amitesh kumar Yadav</h1>
-    <p>Connect karo aur bas bolo — avatar jawab dega</p>
-    <button id="connectBtn">🎙️ bolna start karo</button>
-  </div>
-
-  <div id="waiting">Avatar aa raha hai…</div>
-
-  <div id="badge"><span id="dot" class="dot"></span><span id="status">Connecting…</span></div>
-
-  <div id="controls">
-    <button id="muteBtn" class="round" title="Mic mute/unmute">🎤</button>
-    <button id="endBtn" class="round end" title="Khatam karo">✕</button>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script>
-const { Room, RoomEvent, Track } = LivekitClient;
-
-const $ = (id) => document.getElementById(id);
-const stage = $("stage"), video = $("avatarVideo"), statusEl = $("status"), dot = $("dot");
-let room = null, muted = false;
-
-function setStatus(t) { statusEl.textContent = t; }
-
-function updateAgentState() {
-  if (!room) return;
-  for (const p of room.remoteParticipants.values()) {
-    const state = p.attributes && p.attributes["lk.agent.state"];
-    if (state) {
-      const map = { initializing: "Start ho raha hai…", listening: "Sun raha hai…", thinking: "Soch raha hai…", speaking: "Bol raha hai…" };
-      setStatus(map[state] || state);
-      return;
-    }
-  }
-}
-
-async function connect() {
-  $("connectBtn").disabled = true;
-  $("connectBtn").textContent = "Connecting…";
-  try {
-    const res = await fetch(`/token?name=User`);
-    if (!res.ok) throw new Error("Token server error " + res.status);
-    const { token, url } = await res.json();
-
-    room = new Room({ adaptiveStream: true, dynacast: true });
-
-    room.on(RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === Track.Kind.Video) {
-        track.attach(video);
-        stage.classList.add("has-video");
-      } else if (track.kind === Track.Kind.Audio) {
-        const el = track.attach();
-        el.style.display = "none";
-        document.body.appendChild(el);
-      }
-    });
-    room.on(RoomEvent.TrackUnsubscribed, (track) => {
-      track.detach().forEach((e) => { if (e !== video) e.remove(); });
-      if (track.kind === Track.Kind.Video) stage.classList.remove("has-video");
-    });
-
-    room.on(RoomEvent.ParticipantAttributesChanged, updateAgentState);
-    room.on(RoomEvent.ParticipantConnected, updateAgentState);
-
-    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      dot.classList.toggle("speaking", speakers.some((s) => !s.isLocal));
-      $("muteBtn").classList.toggle("talking", !muted && speakers.some((s) => s.isLocal));
-    });
-
-    room.on(RoomEvent.Disconnected, resetUI);
-
-    await room.connect(url, token);
-    await room.startAudio();
-    await room.localParticipant.setMicrophoneEnabled(true);
-
-    stage.classList.add("connected");
-    setStatus("Avatar ka wait…");
-    updateAgentState();
-  } catch (e) {
-    console.error(e);
-    $("connectBtn").disabled = false;
-    $("connectBtn").textContent = "🎙️ Phir se try karo";
-    alert("Connect nahi hua: " + e.message);
-  }
-}
-
-function resetUI() {
-  stage.classList.remove("connected", "has-video");
-  video.srcObject = null;
-  muted = false;
-  $("muteBtn").textContent = "🎤";
-  $("muteBtn").classList.remove("muted", "talking");
-  $("connectBtn").disabled = false;
-  $("connectBtn").textContent = "🎙️ Baat shuru karo";
-}
-
-$("connectBtn").onclick = connect;
-$("endBtn").onclick = () => room && room.disconnect();
-$("muteBtn").onclick = async () => {
-  muted = !muted;
-  await room.localParticipant.setMicrophoneEnabled(!muted);
-  $("muteBtn").textContent = muted ? "🔇" : "🎤";
-  $("muteBtn").classList.toggle("muted", muted);
-  if (muted) $("muteBtn").classList.remove("talking");
-};
-</script>
-</body>
-</html>
+<html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FormSaathi — Business Workspace</title>
+<link rel="stylesheet" href="/styles.css"></head><body>
+<header><div><h1>🧭 FormSaathi</h1><p>Aap boliye, main kaam ko aasaan banaunga</p></div><div class="top-actions"><button class="tabbtn active" data-tab="sales">Sales report</button><button class="tabbtn" data-tab="research">Online research</button><button class="tabbtn" data-tab="forms">Jobs & forms</button><button id="chatOpen" class="chat-open">Baat karein</button></div></header>
+<main>
+<section class="intro"><h2>Namaste! Aaj kya taiyaar karna hai?</h2><p>Apni file upload karein, latest jaankari dhoondhein, ya job form ke saath aage badhein.</p></section>
+<section id="researchView" class="hide"><div class="sales-grid"><section class="card"><h3>Internet se jaankari dhoondhein</h3><p class="hint">Jaise: “UP ke vidhayakon ki ghoshit sampatti, source aur report date ke saath”</p><label for="researchQuery">Aap kya dhoondhna chahte hain?</label><textarea id="researchQuery" rows="3" placeholder="Apne shabdon mein likhein…"></textarea><div class="toolbar"><button id="researchBtn">Search aur source list</button><button id="researchExport" class="secondary" disabled>Excel source sheet</button></div><div id="researchStatus" class="status">Search ke liye internet connection chahiye.</div></section><section class="card"><h3>Source check karna zaroori hai</h3><p class="hint">FormSaathi source links aur snippets Excel mein rakhega. Har source khol kar date aur figures verify karein; search snippet apne aap verified dataset nahi hota.</p><div class="alert good">Aap official sites ka naam query mein likh sakte hain, jaise ECI, result portal ya company website.</div></section></div><div id="researchResults" class="data-table hide"></div></section>
+<section id="salesView"><div class="intro"><h2>Apni sales sheet ko report mein badlein.</h2><p>Excel/CSV upload karein. Product-wise bikri, units, average price aur cost available ho to estimated profit ke saath workbook ready hogi.</p></div>
+<div class="sales-grid"><section class="card"><div class="section-title"><div><h3>Company sales data</h3><p class="hint">CSV ya Excel file upload karein</p></div><a class="button secondary" href="data:text/csv;charset=utf-8,Sale%20Date%2CProduct%2CQuantity%2CUnit%20Price%2CUnit%20Cost%0A2026-01-05%2CCoffee%2C12%2C250%2C140%0A2026-01-05%2CTea%2C8%2C180%2C90" download="formsaathi-sales-template.csv">Sample CSV</a></div><label for="companyName">Company / shop ka naam</label><input id="companyName" type="text" placeholder="Jaise: Sharma General Store"><label for="salesCurrency">Currency</label><select id="salesCurrency"><option value="INR">INR · ₹</option><option value="USD">USD · $</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option></select><label for="salesFile">Sales workbook</label><div class="drop"><input id="salesFile" type="file" accept=".csv,.tsv,.xlsx,.xls,.json"></div><div id="salesStatus" class="status">File aapke local FormSaathi session mein process hogi.</div><div id="salesErrors" class="alert hide"></div></section><section class="card"><h3>Report mein kya milega</h3><p class="hint">Sheet ke available columns se report tayyar hogi.</p><div><span class="tag">Product-wise units</span><span class="tag">Total sales</span><span class="tag">Average price</span><span class="tag">Profit, agar cost ho</span></div><div class="alert good">Report ke liye <b>Product</b> aur <b>Quantity</b> zaroori hain. Price/Total se sales, Cost Price se profit calculate hoga. Column samajh na aaye to Hindi assistant se poochhein.</div><button id="salesReportBtn" disabled>Excel sales report download</button></section></div><section id="salesResults" class="sales-results hide"><div class="section-title"><h3 id="reportTitle">Sales overview</h3><span id="salesStatusTag" class="badge">Ready to review</span></div><div id="salesMetrics" class="metric-grid"></div><div id="salesMapping" class="small"></div><h3>Product-wise performance</h3><div id="productTable" class="data-table"></div><p class="small" id="salesFootnote"></p></section></section>
+<section id="formWorkflow" class="hide"><div class="intro"><h2>Job forms, aasaan tareeke se.</h2><p>Resume ya data sheet upload karein, form kholen, fields check karein. Jahan jaankari kam ho, assistant se poochhein.</p></div>
+<aside id="helper" aria-live="polite" aria-label="Animated FormSaathi helper"><div class="scene"><svg class="person" viewBox="0 0 100 112" role="img" aria-label="Laptop par kaam karta helper"><ellipse cx="51" cy="104" rx="36" ry="5" fill="#193a2b" opacity=".1"/><path d="M32 53Q50 42 68 53L75 82 28 82Z" fill="#21815e"/><path class="arm left" d="M33 56L22 73 38 82" fill="none" stroke="#d59a72" stroke-width="7" stroke-linecap="round"/><path class="arm" d="M67 56L80 70 64 82" fill="none" stroke="#d59a72" stroke-width="7" stroke-linecap="round"/><path d="M42 50V44H59V53" fill="#cb8e68"/><ellipse cx="51" cy="32" rx="22" ry="25" fill="#d9a17a"/><path d="M29 30Q26 8 48 8Q69 7 74 25L68 19Q57 17 49 12Q44 22 29 24Z" fill="#26352e"/><ellipse class="eyes" cx="43" cy="34" rx="2" ry="2.6" fill="#29352e"/><ellipse class="eyes" cx="59" cy="34" rx="2" ry="2.6" fill="#29352e"/><path d="M46 44Q51 48 57 43" fill="none" stroke="#8f5147" stroke-width="1.8" stroke-linecap="round"/><path d="M22 82L78 82 88 101 12 101Z" fill="#304d3e"/><path class="screen" d="M27 85H73L79 98H21Z" fill="#d9eee2"/><rect x="39" y="89" width="24" height="2" rx="1" fill="#67a981"/><rect class="cursor" x="56" y="92" width="2" height="4" rx="1" fill="#167553"/><path d="M8 102H92" stroke="#233b2f" stroke-width="3" stroke-linecap="round"/></svg></div><div id="helperNote" class="helper-note">Namaste! Main yahin hoon.</div><div id="helperStatus" class="helper-status">Aapke agle step ka intezaar</div></aside>
+<div class="steps">
+<section class="card"><div class="num">1</div><h3>Resume ya data upload karein</h3><p class="hint">Job form ke liye resume PDF/DOCX/TXT; anya forms ke liye CSV/Excel/JSON.</p><div class="drop"><label for="resumeFile">Resume upload</label><input id="resumeFile" type="file" accept=".pdf,.docx,.txt"><label for="file">Data sheet upload</label><input id="file" type="file" accept=".csv,.tsv,.xlsx,.xls,.json,.txt"></div><div id="uploadStatus" class="status">Abhi koi file nahin chuni.</div><div class="toolbar"><button id="sheetBtn" class="secondary" disabled>Data sheet CSV download</button></div><div id="recordWrap" class="hide"><label>Kaunsa record use karna hai?</label><select id="record"></select><div id="preview" class="preview"></div></div><p class="small">Resume se pehchani jaankari dikhayi jayegi; form par bhejne se pehle har field check karein.</p></section>
+<section class="card"><div class="num">2</div><h3>Online form ya jaankari kholen</h3><p class="hint">Web par search karke form page dhoondhein, phir uska address dalein.</p><label for="webSearch">Kya dhoondhna hai?</label><div class="row"><input id="webSearch" type="text" placeholder="scholarship application form"></div><div class="toolbar"><button id="searchWeb">Web par search karein</button></div><p class="small">Search shabd Google ko bheje jayenge. Is box mein personal details na likhein.</p><label for="url">Form ka web address</label><div class="row"><input id="url" type="text" placeholder="https://example.com/application"></div><div class="toolbar"><button id="openForm">Form nayi tab mein kholen</button></div><div class="alert">Bank, government ya sensitive form mein details submit karne se pehle har field khud verify karein. Password, OTP, card details ya payment fields auto-fill nahin honge.</div><p class="small">Form page par pahunch kar bookmarklet ko bookmarks bar mein drag karein. Form page par use click karke copy ki gayi field list yahan paste karein.</p><a id="scanLink" class="button secondary" href="#">Form ke fields padhein (bookmarklet)</a><div id="scanHint" class="status">Bookmarklet ko bookmarks bar mein drag karein.</div><label for="scanData">Form field list paste karein</label><textarea id="scanData" rows="3" placeholder='Bookmarklet se copy hui JSON field list yahan paste karein'></textarea></section>
+<section class="card"><div class="num">3</div><h3>Match karein aur fill karein</h3><p class="hint">Agent ka sujhaav dekhein. Galat/uncertain match ko badlein ya khali chhodein.</p><div id="mapping"><div class="status">Pehle file upload karein aur form page scan karein.</div></div><label class="approval"><input id="approveFormFill" type="checkbox" disabled><span>Maine selected values aur destination check kar liya hai. Main in details ko <b id="destinationHost">—</b> form mein bharne ki manzoori deta/deti hoon.</span></label><div class="toolbar"><button id="applyLink" disabled>Review karke fill karne ka bookmarklet</button><button id="reportBtn" class="secondary" disabled>Report download</button></div><div id="report" class="report hide"></div></section>
+</div><div id="notice" class="alert hide"></div><div class="alert good"><b>Aapke control mein:</b> app form submit nahin karta. Fill ke baad errors aur missing fields page par check karein; mushkil lage to form manually bharein.</div></section></main><div class="footer">FormSaathi · Data uploads server par save nahin hote · Form aap review karke khud submit karte hain</div>
+<section id="chatPanel" class="chat-panel hide" role="dialog" aria-label="Hindi assistant"><div class="chat-head"><div><b>FormSaathi se poochhein</b><div class="small">Sales, job aur form ke baare mein</div></div><button id="chatClose" class="close-chat" aria-label="Band karein">✕</button></div><div id="chatMessages" class="chat-messages"><div class="bubble">Namaste! Sales report banane, resume details samajhne, ya form ke kisi field ka matlab jaanne ke liye poochhein.</div></div><form id="chatForm" class="chat-entry"><input id="chatInput" type="text" placeholder="Apna sawaal likhein…" autocomplete="off"><button>Bhejein</button></form></section>
+<script src="/app.js" defer></script></body></html>
